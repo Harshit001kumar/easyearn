@@ -14,10 +14,14 @@ connectDB();
 
 // ─── MIDDLEWARE ───
 app.use(helmet());
+
+const clientUrl = (process.env.CLIENT_URL || 'http://localhost:5173').replace(/\/$/, "");
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: [clientUrl, 'http://localhost:5173'],
   credentials: true
 }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
