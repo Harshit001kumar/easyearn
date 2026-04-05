@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background-color: #0c0c1d;
+    color: #e6e3fb;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #121223;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #474659;
+    border-radius: 3px;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-surface-container/60 backdrop-blur-xl rounded-2xl border border-white/5;
+  }
+
+  .glass-card-hover {
+    @apply glass-card transition-all duration-300 hover:bg-surface-container-high/80 hover:border-primary/20 hover:shadow-lg hover:shadow-primary/5;
+  }
+
+  .btn-primary {
+    @apply bg-gradient-to-r from-primary-dim to-secondary-dim text-white font-semibold py-3 px-6 rounded-xl transition-all duration-300 hover:shadow-lg hover:shadow-primary/25 hover:scale-[1.02] active:scale-[0.98];
+  }
+
+  .btn-secondary {
+    @apply bg-surface-container-highest text-on-surface border border-white/10 font-medium py-3 px-6 rounded-xl transition-all duration-300 hover:border-primary/30;
+  }
+
+  .btn-danger {
+    @apply bg-red-500/20 text-error border border-error/20 font-medium py-2 px-4 rounded-xl transition-all duration-300 hover:bg-red-500/30;
+  }
+
+  .btn-success {
+    @apply bg-green-500/20 text-success border border-success/20 font-medium py-2 px-4 rounded-xl transition-all duration-300 hover:bg-green-500/30;
+  }
+
+  .input-field {
+    @apply w-full bg-surface-container-low border-none text-on-surface placeholder-on-surface-variant/50 py-3 px-4 rounded-xl outline-none transition-all duration-300 focus:ring-2 focus:ring-primary/50 focus:shadow-lg focus:shadow-primary/10;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-pending {
+    @apply badge bg-warning/20 text-warning;
+  }
+
+  .badge-success {
+    @apply badge bg-success/20 text-success;
+  }
+
+  .badge-error {
+    @apply badge bg-error/20 text-error;
+  }
+
+  .stat-card {
+    @apply glass-card p-6 flex flex-col gap-2;
+  }
+
+  .sidebar-link {
+    @apply flex items-center gap-3 px-4 py-3 rounded-xl text-on-surface-variant transition-all duration-200 hover:bg-surface-container-high hover:text-on-surface;
+  }
+
+  .sidebar-link-active {
+    @apply sidebar-link bg-primary/10 text-primary border-l-2 border-primary;
+  }
+
+  .glow-text {
+    @apply bg-gradient-to-r from-primary-light to-secondary bg-clip-text text-transparent;
+  }
+}
