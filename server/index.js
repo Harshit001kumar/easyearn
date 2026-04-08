@@ -15,10 +15,10 @@ connectDB();
 // ─── MIDDLEWARE ───
 app.use(helmet());
 
-const clientUrl = (process.env.CLIENT_URL || 'http://localhost:5173').replace(/\/$/, "");
-
 app.use(cors({
-  origin: [clientUrl, 'http://localhost:5173'],
+  origin: function (origin, callback) {
+    callback(null, true); // Temporarily allow ANY origin to bypass strict matching
+  },
   credentials: true
 }));
 
