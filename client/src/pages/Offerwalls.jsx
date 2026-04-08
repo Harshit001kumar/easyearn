@@ -13,7 +13,7 @@ export default function Offerwalls() {
       color: 'border-violet-500/30',
       badgeColor: 'bg-violet-500/20 text-violet-400',
       earnings: 'Up to 1,000 Points per offer',
-      url: `https://wall.revtoo.com/?apiKey=YOUR_REVTOO_API_KEY&userId=${user?.id}`
+      url: `https://wall.revtoo.com/?apiKey=${import.meta.env.VITE_REVTOO_API_KEY}&userId=${user?.id}`
     }
   ];
 
