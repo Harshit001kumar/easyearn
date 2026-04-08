@@ -89,7 +89,7 @@ export default function Landing() {
           <div className="grid md:grid-cols-3 gap-8">
             {[
               { icon: HiLightningBolt, title: 'Faucet', desc: 'Claim free points every 5 minutes. Quick and easy.', color: 'text-green-400' },
-              { icon: HiBriefcase, title: 'Offerwalls', desc: 'Complete surveys and tasks for big rewards from CPAGrip & AdGate.', color: 'text-amber-400' },
+              { icon: HiBriefcase, title: 'Offerwalls', desc: 'Complete surveys, install apps, and complete tasks for big rewards via RevToo.', color: 'text-amber-400' },
               { icon: HiLink, title: 'Shortlinks', desc: 'Visit shortlinks via ShrinkMe and earn points after verification.', color: 'text-blue-400' }
             ].map((f, i) => (
               <motion.div key={f.title} custom={i} variants={fadeUp} initial="hidden" whileInView="visible" viewport={{ once: true }} className="glass-card-hover p-8">

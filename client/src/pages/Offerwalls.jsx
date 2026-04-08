@@ -7,22 +7,13 @@ export default function Offerwalls() {
 
   const offerwalls = [
     {
-      name: 'CPAGrip',
-      desc: 'Complete surveys, install apps, and sign up for services.',
+      name: 'RevToo',
+      desc: 'Complete surveys, install apps, watch videos, and sign up for services to earn big rewards.',
       badge: 'High Paying',
-      color: 'border-green-500/30',
-      badgeColor: 'bg-green-500/20 text-green-400',
-      earnings: 'Up to 500 Points per offer',
-      url: `https://www.cpagrip.com/show.php?id=YOUR_CPAGRIP_ID&user_id=${user?.id}`
-    },
-    {
-      name: 'AdGate Media',
-      desc: 'Install apps and complete actions for big rewards.',
-      badge: 'Popular',
-      color: 'border-amber-500/30',
-      badgeColor: 'bg-amber-500/20 text-amber-400',
+      color: 'border-violet-500/30',
+      badgeColor: 'bg-violet-500/20 text-violet-400',
       earnings: 'Up to 1,000 Points per offer',
-      url: `https://wall.adgaterewards.com/oZKoNJ/${user?.id}`
+      url: `https://wall.revtoo.com/?apiKey=YOUR_REVTOO_API_KEY&userId=${user?.id}`
     }
   ];
 
@@ -65,7 +56,7 @@ export default function Offerwalls() {
         <h3 className="text-lg font-semibold mb-6">How It Works</h3>
         <div className="grid md:grid-cols-3 gap-6">
           {[
-            { step: '1', title: 'Choose an Offerwall', desc: 'Select CPAGrip or AdGate Media above' },
+            { step: '1', title: 'Open RevToo', desc: 'Click "Start Earning" to open the offerwall' },
             { step: '2', title: 'Complete the Task', desc: 'Follow instructions carefully to earn credit' },
             { step: '3', title: 'Earn 60% Reward', desc: 'Points are credited automatically via postback' }
           ].map(s => (
