@@ -49,6 +49,11 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Root path for Render health checks (Render often checks / by default)
+app.get('/', (req, res) => {
+  res.send('FreeCash API is running.');
+});
+
 // ─── ROUTES ───
 app.use('/api/auth', authLimiter, require('./routes/auth'));
 app.use('/api/dashboard', apiLimiter, require('./routes/dashboard'));
@@ -65,7 +70,7 @@ app.use((err, req, res, next) => {
 });
 
 // ─── START SERVER + BOT ───
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
   startBot(); // Discord bot starts alongside the Express server
 });
