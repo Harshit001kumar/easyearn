@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits } = require('discord.js');
 const axios = require('axios');
 const Withdrawal = require('../models/Withdrawal');
 const User = require('../models/User');
@@ -74,149 +74,410 @@ async function sendWithdrawalNotification(withdrawal, user) {
   }
 }
 
-// ─── BUTTON INTERACTION HANDLER ───
+// ─── INTERACTION HANDLER (Buttons + Modals) ───
 client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isButton()) return;
 
-  const [action, withdrawalId] = interaction.customId.split('_');
+  // ═══ BUTTON INTERACTIONS ═══
+  if (interaction.isButton()) {
+    const customId = interaction.customId;
 
-  if (!['approve', 'reject'].includes(action)) return;
+    // --- Withdrawal approve/reject buttons ---
+    if (customId.startsWith('approve_') || customId.startsWith('reject_')) {
+      const [action, withdrawalId] = customId.split('_');
+      try {
+        const withdrawal = await Withdrawal.findById(withdrawalId);
+        if (!withdrawal) {
+          return interaction.reply({ content: '❌ Withdrawal not found.', ephemeral: true });
+        }
+        if (withdrawal.status !== 'pending') {
+          return interaction.reply({ content: '⚠️ This withdrawal has already been processed.', ephemeral: true });
+        }
 
-  try {
-    const withdrawal = await Withdrawal.findById(withdrawalId);
-    if (!withdrawal) {
-      return interaction.reply({ content: '❌ Withdrawal not found.', ephemeral: true });
-    }
+        if (action === 'approve') {
+          withdrawal.status = 'approved';
+          withdrawal.processedBy = interaction.user.tag;
+          await withdrawal.save();
+          await Transaction.findOneAndUpdate(
+            { userId: withdrawal.userId, type: 'withdrawal', status: 'pending' },
+            { status: 'completed' }
+          );
+          const embed = new EmbedBuilder()
+            .setTitle('✅ Withdrawal APPROVED')
+            .setColor(0x22C55E)
+            .setDescription(`Approved by **${interaction.user.tag}**`)
+            .addFields(
+              { name: '💎 Points', value: withdrawal.amountPoints.toLocaleString(), inline: true },
+              { name: '📋 Method', value: withdrawal.method, inline: true },
+              { name: '📨 Destination', value: `\`${withdrawal.destination}\``, inline: false }
+            )
+            .setTimestamp()
+            .setFooter({ text: `Withdrawal ID: ${withdrawal._id}` });
+          await interaction.update({ embeds: [embed], components: [] });
 
-    if (withdrawal.status !== 'pending') {
-      return interaction.reply({ content: '⚠️ This withdrawal has already been processed.', ephemeral: true });
-    }
-
-    if (action === 'approve') {
-      withdrawal.status = 'approved';
-      withdrawal.processedBy = interaction.user.tag;
-      await withdrawal.save();
-
-      // Update transaction
-      await Transaction.findOneAndUpdate(
-        { userId: withdrawal.userId, type: 'withdrawal', status: 'pending' },
-        { status: 'completed' }
-      );
-
-      // Update the embed
-      const embed = new EmbedBuilder()
-        .setTitle('✅ Withdrawal APPROVED')
-        .setColor(0x22C55E)
-        .setDescription(`Approved by **${interaction.user.tag}**`)
-        .addFields(
-          { name: '💎 Points', value: withdrawal.amountPoints.toLocaleString(), inline: true },
-          { name: '📋 Method', value: withdrawal.method, inline: true },
-          { name: '📨 Destination', value: `\`${withdrawal.destination}\``, inline: false }
-        )
-        .setTimestamp()
-        .setFooter({ text: `Withdrawal ID: ${withdrawal._id}` });
-
-      await interaction.update({ embeds: [embed], components: [] });
-
-      // Post payment proof to #payment-proofs channel
-      const approvedUser = await User.findById(withdrawal.userId);
-      if (approvedUser) {
-        await sendPaymentProof(withdrawal, approvedUser);
+          // Post payment proof
+          const approvedUser = await User.findById(withdrawal.userId);
+          if (approvedUser) {
+            await sendPaymentProof(withdrawal, approvedUser);
+          }
+        } else {
+          withdrawal.status = 'rejected';
+          withdrawal.processedBy = interaction.user.tag;
+          await withdrawal.save();
+          await User.findByIdAndUpdate(withdrawal.userId, {
+            $inc: { points: withdrawal.amountPoints }
+          });
+          await Transaction.findOneAndUpdate(
+            { userId: withdrawal.userId, type: 'withdrawal', status: 'pending' },
+            { status: 'rejected' }
+          );
+          await Transaction.create({
+            userId: withdrawal.userId,
+            type: 'admin_adjust',
+            points: withdrawal.amountPoints,
+            status: 'completed',
+            details: 'Withdrawal rejected — points refunded'
+          });
+          const embed = new EmbedBuilder()
+            .setTitle('❌ Withdrawal REJECTED')
+            .setColor(0xEF4444)
+            .setDescription(`Rejected by **${interaction.user.tag}** — Points refunded.`)
+            .addFields(
+              { name: '💎 Points Refunded', value: withdrawal.amountPoints.toLocaleString(), inline: true },
+              { name: '📋 Method', value: withdrawal.method, inline: true }
+            )
+            .setTimestamp()
+            .setFooter({ text: `Withdrawal ID: ${withdrawal._id}` });
+          await interaction.update({ embeds: [embed], components: [] });
+        }
+      } catch (error) {
+        console.error('Button interaction error:', error);
+        interaction.reply({ content: '❌ An error occurred.', ephemeral: true }).catch(() => {});
       }
-    } else {
-      // Reject — refund points
-      withdrawal.status = 'rejected';
-      withdrawal.processedBy = interaction.user.tag;
-      await withdrawal.save();
-
-      await User.findByIdAndUpdate(withdrawal.userId, {
-        $inc: { points: withdrawal.amountPoints }
-      });
-
-      await Transaction.findOneAndUpdate(
-        { userId: withdrawal.userId, type: 'withdrawal', status: 'pending' },
-        { status: 'rejected' }
-      );
-
-      await Transaction.create({
-        userId: withdrawal.userId,
-        type: 'admin_adjust',
-        points: withdrawal.amountPoints,
-        status: 'completed',
-        details: 'Withdrawal rejected — points refunded'
-      });
-
-      const embed = new EmbedBuilder()
-        .setTitle('❌ Withdrawal REJECTED')
-        .setColor(0xEF4444)
-        .setDescription(`Rejected by **${interaction.user.tag}** — Points refunded.`)
-        .addFields(
-          { name: '💎 Points Refunded', value: withdrawal.amountPoints.toLocaleString(), inline: true },
-          { name: '📋 Method', value: withdrawal.method, inline: true }
-        )
-        .setTimestamp()
-        .setFooter({ text: `Withdrawal ID: ${withdrawal._id}` });
-
-      await interaction.update({ embeds: [embed], components: [] });
+      return;
     }
-  } catch (error) {
-    console.error('Button interaction error:', error);
-    interaction.reply({ content: '❌ An error occurred.', ephemeral: true });
+
+    // --- Admin Dashboard Buttons ---
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return interaction.reply({ content: '🔒 You need Administrator permissions.', ephemeral: true });
+    }
+
+    if (customId === 'admin_stats') {
+      try {
+        const totalUsers = await User.countDocuments();
+        const pendingWithdrawals = await Withdrawal.countDocuments({ status: 'pending' });
+        const bannedUsers = await User.countDocuments({ isBanned: true });
+
+        const totalPointsResult = await Transaction.aggregate([
+          { $match: { type: { $ne: 'withdrawal' }, status: 'completed' } },
+          { $group: { _id: null, total: { $sum: '$points' } } }
+        ]);
+        const totalPoints = totalPointsResult[0]?.total || 0;
+
+        const totalWithdrawnResult = await Withdrawal.aggregate([
+          { $match: { status: 'approved' } },
+          { $group: { _id: null, total: { $sum: '$amountPoints' } } }
+        ]);
+        const totalWithdrawn = totalWithdrawnResult[0]?.total || 0;
+
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const newUsersToday = await User.countDocuments({ createdAt: { $gte: todayStart } });
+
+        const embed = new EmbedBuilder()
+          .setTitle('📊 EasyEarn Admin Stats')
+          .setColor(0x7c3aed)
+          .addFields(
+            { name: '👥 Total Users', value: totalUsers.toLocaleString(), inline: true },
+            { name: '🆕 New Today', value: newUsersToday.toLocaleString(), inline: true },
+            { name: '🚫 Banned', value: bannedUsers.toLocaleString(), inline: true },
+            { name: '💎 Points Distributed', value: totalPoints.toLocaleString(), inline: true },
+            { name: '💸 Total Withdrawn', value: `${totalWithdrawn.toLocaleString()} pts`, inline: true },
+            { name: '⏳ Pending Withdrawals', value: pendingWithdrawals.toLocaleString(), inline: true }
+          )
+          .setTimestamp()
+          .setFooter({ text: 'EasyEarn Admin Panel' });
+
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+      } catch (error) {
+        console.error('Admin stats error:', error);
+        return interaction.reply({ content: '❌ Failed to fetch stats.', ephemeral: true });
+      }
+    }
+
+    if (customId === 'admin_lookup') {
+      const modal = new ModalBuilder()
+        .setCustomId('modal_lookup')
+        .setTitle('🔍 User Lookup');
+      const emailInput = new TextInputBuilder()
+        .setCustomId('lookup_email')
+        .setLabel('User Email')
+        .setPlaceholder('user@example.com')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+      modal.addComponents(new ActionRowBuilder().addComponents(emailInput));
+      return interaction.showModal(modal);
+    }
+
+    if (customId === 'admin_adjust') {
+      const modal = new ModalBuilder()
+        .setCustomId('modal_adjust')
+        .setTitle('💰 Adjust User Balance');
+      const emailInput = new TextInputBuilder()
+        .setCustomId('adjust_email')
+        .setLabel('User Email')
+        .setPlaceholder('user@example.com')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+      const pointsInput = new TextInputBuilder()
+        .setCustomId('adjust_points')
+        .setLabel('Points (use - for deduction)')
+        .setPlaceholder('500 or -200')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+      const reasonInput = new TextInputBuilder()
+        .setCustomId('adjust_reason')
+        .setLabel('Reason')
+        .setPlaceholder('Bonus reward / correction')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false);
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(emailInput),
+        new ActionRowBuilder().addComponents(pointsInput),
+        new ActionRowBuilder().addComponents(reasonInput)
+      );
+      return interaction.showModal(modal);
+    }
+
+    if (customId === 'admin_ban') {
+      const modal = new ModalBuilder()
+        .setCustomId('modal_ban')
+        .setTitle('🚫 Ban / Unban User');
+      const emailInput = new TextInputBuilder()
+        .setCustomId('ban_email')
+        .setLabel('User Email')
+        .setPlaceholder('user@example.com')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+      modal.addComponents(new ActionRowBuilder().addComponents(emailInput));
+      return interaction.showModal(modal);
+    }
+  }
+
+  // ═══ MODAL SUBMISSIONS ═══
+  if (interaction.isModalSubmit()) {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return interaction.reply({ content: '🔒 You need Administrator permissions.', ephemeral: true });
+    }
+
+    const modalId = interaction.customId;
+
+    // --- User Lookup ---
+    if (modalId === 'modal_lookup') {
+      const email = interaction.fields.getTextInputValue('lookup_email').trim().toLowerCase();
+      try {
+        const user = await User.findOne({ email });
+        if (!user) {
+          return interaction.reply({ content: `❌ No user found with email: \`${email}\``, ephemeral: true });
+        }
+        const embed = new EmbedBuilder()
+          .setTitle('👤 User Details')
+          .setColor(0x06b6d4)
+          .addFields(
+            { name: '📧 Email', value: user.email, inline: true },
+            { name: '🆔 ID', value: user._id.toString(), inline: true },
+            { name: '🎮 Discord', value: user.discord?.username || 'Not linked', inline: true },
+            { name: '💎 Points', value: user.points.toLocaleString(), inline: true },
+            { name: '🪙 LTC Value', value: `${(user.points * 0.00001).toFixed(6)} LTC`, inline: true },
+            { name: '🚫 Banned', value: user.isBanned ? '**YES**' : 'No', inline: true },
+            { name: '🔗 Referral Code', value: `\`${user.referralCode}\``, inline: true },
+            { name: '📅 Joined', value: user.createdAt.toLocaleDateString(), inline: true },
+            { name: '👑 Admin', value: user.isAdmin ? '**YES**' : 'No', inline: true }
+          )
+          .setTimestamp()
+          .setFooter({ text: 'EasyEarn Admin Panel' });
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+      } catch (error) {
+        console.error('Lookup error:', error);
+        return interaction.reply({ content: '❌ Lookup failed.', ephemeral: true });
+      }
+    }
+
+    // --- Adjust Balance ---
+    if (modalId === 'modal_adjust') {
+      const email = interaction.fields.getTextInputValue('adjust_email').trim().toLowerCase();
+      const pointsStr = interaction.fields.getTextInputValue('adjust_points').trim();
+      const reason = interaction.fields.getTextInputValue('adjust_reason')?.trim() || 'Admin adjustment via Discord';
+      const points = parseInt(pointsStr);
+
+      if (isNaN(points) || points === 0) {
+        return interaction.reply({ content: '❌ Invalid points value. Use a number like `500` or `-200`.', ephemeral: true });
+      }
+
+      try {
+        const user = await User.findOne({ email });
+        if (!user) {
+          return interaction.reply({ content: `❌ No user found with email: \`${email}\``, ephemeral: true });
+        }
+
+        const oldBalance = user.points;
+        user.points = Math.max(0, user.points + points);
+        await user.save();
+
+        await Transaction.create({
+          userId: user._id,
+          type: 'admin_adjust',
+          points: points,
+          status: 'completed',
+          details: `${reason} (by ${interaction.user.tag})`
+        });
+
+        const embed = new EmbedBuilder()
+          .setTitle(points > 0 ? '✅ Points Added' : '⚠️ Points Deducted')
+          .setColor(points > 0 ? 0x22c55e : 0xeab308)
+          .addFields(
+            { name: '📧 User', value: email, inline: true },
+            { name: '💰 Change', value: `${points > 0 ? '+' : ''}${points.toLocaleString()} pts`, inline: true },
+            { name: '\u200b', value: '\u200b', inline: true },
+            { name: '📊 Old Balance', value: oldBalance.toLocaleString(), inline: true },
+            { name: '📊 New Balance', value: user.points.toLocaleString(), inline: true },
+            { name: '📝 Reason', value: reason, inline: true }
+          )
+          .setTimestamp()
+          .setFooter({ text: `Adjusted by ${interaction.user.tag}` });
+
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+      } catch (error) {
+        console.error('Adjust balance error:', error);
+        return interaction.reply({ content: '❌ Failed to adjust balance.', ephemeral: true });
+      }
+    }
+
+    // --- Ban / Unban ---
+    if (modalId === 'modal_ban') {
+      const email = interaction.fields.getTextInputValue('ban_email').trim().toLowerCase();
+      try {
+        const user = await User.findOne({ email });
+        if (!user) {
+          return interaction.reply({ content: `❌ No user found with email: \`${email}\``, ephemeral: true });
+        }
+
+        user.isBanned = !user.isBanned;
+        await user.save();
+
+        const embed = new EmbedBuilder()
+          .setTitle(user.isBanned ? '🚫 User BANNED' : '✅ User UNBANNED')
+          .setColor(user.isBanned ? 0xef4444 : 0x22c55e)
+          .addFields(
+            { name: '📧 Email', value: user.email, inline: true },
+            { name: '🆔 ID', value: user._id.toString(), inline: true },
+            { name: '📌 Status', value: user.isBanned ? '🔴 Banned' : '🟢 Active', inline: true }
+          )
+          .setTimestamp()
+          .setFooter({ text: `Action by ${interaction.user.tag}` });
+
+        return interaction.reply({ embeds: [embed], ephemeral: true });
+      } catch (error) {
+        console.error('Ban toggle error:', error);
+        return interaction.reply({ content: '❌ Failed to update ban status.', ephemeral: true });
+      }
+    }
   }
 });
 
-// ─── PING COMMAND ───
+// ─── COMMANDS (messageCreate) ───
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
-  if (message.content.toLowerCase() !== '!ping') return;
+  const cmd = message.content.toLowerCase().trim();
 
-  const sent = await message.channel.send('🏓 Pinging...');
+  // ─── !ping ───
+  if (cmd === '!ping') {
+    const sent = await message.channel.send('🏓 Pinging...');
+    const botPing = sent.createdTimestamp - message.createdTimestamp;
+    const wsPing = Math.round(client.ws.ping);
 
-  // Bot latency
-  const botPing = sent.createdTimestamp - message.createdTimestamp;
-  const wsPing = Math.round(client.ws.ping);
+    const clientUrl = process.env.CLIENT_URL || 'https://easyearn-zxob.onrender.com';
+    let websitePing = 'N/A';
+    let websiteStatus = '❌ Down';
+    try {
+      const start = Date.now();
+      const res = await axios.get(clientUrl, { timeout: 8000 });
+      websitePing = `${Date.now() - start}ms`;
+      websiteStatus = res.status === 200 ? '✅ Online' : `⚠️ ${res.status}`;
+    } catch {
+      websiteStatus = '❌ Unreachable';
+    }
 
-  // Website ping
-  const clientUrl = process.env.CLIENT_URL || 'https://easyearn-zxob.onrender.com';
-  let websitePing = 'N/A';
-  let websiteStatus = '❌ Down';
-  try {
-    const start = Date.now();
-    const res = await axios.get(clientUrl, { timeout: 8000 });
-    websitePing = `${Date.now() - start}ms`;
-    websiteStatus = res.status === 200 ? '✅ Online' : `⚠️ ${res.status}`;
-  } catch {
-    websiteStatus = '❌ Unreachable';
+    let apiPing = 'N/A';
+    let apiStatus = '❌ Down';
+    const apiBase = process.env.API_URL || `http://localhost:${process.env.PORT || 5000}`;
+    try {
+      const start = Date.now();
+      const res = await axios.get(`${apiBase}/health`, { timeout: 5000 });
+      apiPing = `${Date.now() - start}ms`;
+      apiStatus = res.data?.status === 'ok' ? '✅ Online' : `⚠️ ${res.status}`;
+    } catch {
+      apiStatus = '❌ Unreachable';
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle('🏓 Pong!')
+      .setColor(botPing < 200 ? 0x22c55e : botPing < 500 ? 0xeab308 : 0xef4444)
+      .addFields(
+        { name: '🤖 Bot Latency', value: `${botPing}ms`, inline: true },
+        { name: '📡 WebSocket', value: `${wsPing}ms`, inline: true },
+        { name: '\u200b', value: '\u200b', inline: true },
+        { name: '🌐 Website', value: `${websiteStatus} (${websitePing})`, inline: true },
+        { name: '⚙️ API', value: `${apiStatus} (${apiPing})`, inline: true },
+        { name: '\u200b', value: '\u200b', inline: true }
+      )
+      .setFooter({ text: 'EasyEarn Status Check' })
+      .setTimestamp();
+
+    await sent.edit({ content: null, embeds: [embed] });
+    return;
   }
 
-  // API ping (self-check)
-  let apiPing = 'N/A';
-  let apiStatus = '❌ Down';
-  const apiBase = process.env.API_URL || `http://localhost:${process.env.PORT || 5000}`;
-  try {
-    const start = Date.now();
-    const res = await axios.get(`${apiBase}/health`, { timeout: 5000 });
-    apiPing = `${Date.now() - start}ms`;
-    apiStatus = res.data?.status === 'ok' ? '✅ Online' : `⚠️ ${res.status}`;
-  } catch {
-    apiStatus = '❌ Unreachable';
+  // ─── !admin ───
+  if (cmd === '!admin') {
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+      return message.reply('🔒 You need **Administrator** permissions to use this command.');
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle('🛡️ EasyEarn Admin Panel')
+      .setColor(0x7c3aed)
+      .setDescription('Welcome, Admin! Use the buttons below to manage the platform.')
+      .addFields(
+        { name: '📊 Stats', value: 'View platform statistics', inline: true },
+        { name: '🔍 Lookup', value: 'Search user by email', inline: true },
+        { name: '💰 Adjust', value: 'Add or deduct points', inline: true },
+        { name: '🚫 Ban/Unban', value: 'Toggle user ban status', inline: true }
+      )
+      .setFooter({ text: 'Admin actions are logged • EasyEarn' })
+      .setTimestamp();
+
+    const row1 = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('admin_stats')
+        .setLabel('📊 Stats')
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId('admin_lookup')
+        .setLabel('🔍 Lookup User')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId('admin_adjust')
+        .setLabel('💰 Adjust Balance')
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId('admin_ban')
+        .setLabel('🚫 Ban / Unban')
+        .setStyle(ButtonStyle.Danger)
+    );
+
+    await message.channel.send({ embeds: [embed], components: [row1] });
+    return;
   }
-
-  const embed = new EmbedBuilder()
-    .setTitle('🏓 Pong!')
-    .setColor(botPing < 200 ? 0x22c55e : botPing < 500 ? 0xeab308 : 0xef4444)
-    .addFields(
-      { name: '🤖 Bot Latency', value: `${botPing}ms`, inline: true },
-      { name: '📡 WebSocket', value: `${wsPing}ms`, inline: true },
-      { name: '\u200b', value: '\u200b', inline: true },
-      { name: '🌐 Website', value: `${websiteStatus} (${websitePing})`, inline: true },
-      { name: '⚙️ API', value: `${apiStatus} (${apiPing})`, inline: true },
-      { name: '\u200b', value: '\u200b', inline: true }
-    )
-    .setFooter({ text: 'EasyEarn Status Check' })
-    .setTimestamp();
-
-  await sent.edit({ content: null, embeds: [embed] });
 });
 
 // ─── LIVE EARNINGS NOTIFICATION (#live-earnings) ───
