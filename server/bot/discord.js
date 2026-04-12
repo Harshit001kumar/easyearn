@@ -439,7 +439,7 @@ client.on('messageCreate', async (message) => {
 
   // ─── !admin ───
   if (cmd === '!admin') {
-    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+    if (!message.member || !message.member.permissions.has(PermissionFlagsBits.Administrator)) {
       return message.reply('🔒 You need **Administrator** permissions to use this command.');
     }
 
