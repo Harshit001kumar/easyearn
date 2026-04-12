@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const User = require('../models/User');
 const Transaction = require('../models/Transaction');
 const Referral = require('../models/Referral');
+const { sendLiveEarningNotification } = require('../bot/discord');
 
 const router = express.Router();
 
@@ -115,6 +116,12 @@ router.get('/revtoo', async (req, res) => {
     }
 
     console.log(`RevToo: Credited ${userPoints} points to ${user.email} (txn: ${transId})`);
+
+    // Post to #live-earnings if high-value offer (>1,000 points)
+    if (userPoints >= 1000) {
+      sendLiveEarningNotification(user, userPoints, offer_name || 'High-Value Offer').catch(() => {});
+    }
+
     res.send('1'); // Success
   } catch (error) {
     console.error('RevToo postback error:', error);
