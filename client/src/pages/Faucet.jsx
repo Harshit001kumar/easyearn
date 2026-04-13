@@ -74,10 +74,15 @@ export default function Faucet() {
     <div className="space-y-8">
       <h1 className="text-2xl font-bold">Faucet</h1>
 
-      {/* Ad Placeholder */}
-      <div className="glass-card p-4 text-center text-on-surface-variant text-sm border border-dashed border-white/10">
-        <p>📢 Advertisement Space (728x90)</p>
-      </div>
+      {/* AADS Ad Unit */}
+      <div className="glass-card p-4" dangerouslySetInnerHTML={{ __html: `
+        <!-- BEGIN AADS AD UNIT 2434144 -->
+        <div id="frame" style="width: 100%;margin: auto;position: relative; z-index: 99998;">
+          <iframe data-aa='2434144' src='//acceptable.a-ads.com/2434144/?size=Adaptive'
+                            style='border:0; padding:0; width:70%; height:auto; overflow:hidden;display: block;margin: auto'></iframe>
+        </div>
+        <!-- END AADS AD UNIT 2434144 -->
+      ` }} />
 
       {/* Main Claim Card */}
       <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="glass-card p-10 max-w-lg mx-auto text-center">
@@ -138,10 +143,15 @@ export default function Faucet() {
         </div>
       </div>
 
-      {/* Side Ad */}
-      <div className="glass-card p-4 text-center text-on-surface-variant text-sm border border-dashed border-white/10 max-w-xs mx-auto">
-        <p>📢 Sidebar Ad (300x250)</p>
-      </div>
+      {/* AADS Ad Unit */}
+      <div className="glass-card p-4 max-w-lg mx-auto" dangerouslySetInnerHTML={{ __html: `
+        <!-- BEGIN AADS AD UNIT 2434144 -->
+        <div id="frame" style="width: 100%;margin: auto;position: relative; z-index: 99998;">
+          <iframe data-aa='2434144' src='//acceptable.a-ads.com/2434144/?size=Adaptive'
+                            style='border:0; padding:0; width:70%; height:auto; overflow:hidden;display: block;margin: auto'></iframe>
+        </div>
+        <!-- END AADS AD UNIT 2434144 -->
+      ` }} />
     </div>
   );
 }
