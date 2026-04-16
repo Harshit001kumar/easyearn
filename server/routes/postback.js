@@ -118,13 +118,104 @@ router.get('/revtoo', async (req, res) => {
     console.log(`RevToo: Credited ${userPoints} points to ${user.email} (txn: ${transId})`);
 
     // Post to #live-earnings if high-value offer (>1,000 points)
-    if (userPoints >= 1000) {
+    if (userPoints >= 10) {
       sendLiveEarningNotification(user, userPoints, offer_name || 'High-Value Offer').catch(() => {});
     }
 
     res.send('1'); // Success
   } catch (error) {
     console.error('RevToo postback error:', error);
+    res.status(500).send('0');
+  }
+});
+
+// ─── Offerwall.me Postback ───
+// Postback URL configured in Offerwall.me dashboard:
+// https://easyearn-zxob.onrender.com/api/postback/offerwall?uid={uid}&reward={reward}&offer_id={offer_id}&txn_id={txn_id}&sig={sig}
+router.get('/offerwall', async (req, res) => {
+  try {
+    const { uid, reward, offer_id, txn_id, sig } = req.query;
+
+    // Validate required parameters
+    if (!uid || !reward || !txn_id) {
+      console.warn('Offerwall.me: Missing required parameters');
+      return res.status(400).send('0');
+    }
+
+    // Verify signature: MD5(txn_id + uid + secret_key)
+    const secretKey = process.env.OFFERWALL_ME_SECRET_KEY;
+    if (secretKey && sig) {
+      const expectedSignature = crypto
+        .createHash('md5')
+        .update(txn_id + uid + secretKey)
+        .digest('hex');
+
+      if (sig !== expectedSignature) {
+        console.warn(`Offerwall.me: Invalid signature for transaction ${txn_id}`);
+        return res.status(403).send('0');
+      }
+    }
+
+    // Check for duplicate transaction
+    const existingTx = await Transaction.findOne({
+      details: { $regex: `txn:${txn_id}` }
+    });
+    if (existingTx) {
+      console.log(`Offerwall.me: Duplicate transaction ${txn_id}, skipping`);
+      return res.send('1'); 
+    }
+
+    const user = await User.findById(uid);
+    if (!user) {
+      console.warn(`Offerwall.me: User not found: ${uid}`);
+      return res.status(404).send('0');
+    }
+
+    const pointsAwarded = parseInt(reward);
+    if (isNaN(pointsAwarded) || pointsAwarded <= 0) {
+      return res.status(400).send('0');
+    }
+
+    user.points += pointsAwarded;
+    await user.save();
+
+    await Transaction.create({
+      userId: user._id,
+      type: 'offerwall',
+      points: pointsAwarded,
+      status: 'completed',
+      details: `Offerwall.me - ${offer_id || 'Offer completed'} (txn:${txn_id})`
+    });
+
+    // Referral commission (10%)
+    if (user.referredBy) {
+      const commission = Math.floor(pointsAwarded * 0.10);
+      if (commission > 0) {
+        await User.findByIdAndUpdate(user.referredBy, { $inc: { points: commission } });
+        await Transaction.create({
+          userId: user.referredBy,
+          type: 'referral',
+          points: commission,
+          status: 'completed',
+          details: `Referral commission from ${user.email} (Offerwall.me)`
+        });
+        await Referral.findOneAndUpdate(
+          { referrerId: user.referredBy, refereeId: user._id },
+          { $inc: { totalPointsEarned: commission } }
+        );
+      }
+    }
+
+    console.log(`Offerwall.me: Credited ${pointsAwarded} points to ${user.email} (txn: ${txn_id})`);
+
+    // Discord notification for high earnings
+    if (pointsAwarded >= 10) {
+      sendLiveEarningNotification(user, pointsAwarded, offer_id || 'Offerwall.me Offer').catch(() => {});
+    }
+
+    res.send('1');
+  } catch (error) {
+    console.error('Offerwall.me postback error:', error);
     res.status(500).send('0');
   }
 });

@@ -9,6 +9,7 @@ import Offerwalls from './pages/Offerwalls';
 import Withdraw from './pages/Withdraw';
 import Referrals from './pages/Referrals';
 import AdminPanel from './pages/AdminPanel';
+import CustomTasks from './pages/CustomTasks';
 import Verify from './pages/Verify';
 import Layout from './components/Layout';
 
@@ -38,6 +39,7 @@ export default function App() {
         <Route path="/offerwalls" element={<Offerwalls />} />
         <Route path="/withdraw" element={<Withdraw />} />
         <Route path="/referrals" element={<Referrals />} />
+        <Route path="/tasks" element={<CustomTasks />} />
         <Route path="/admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
       </Route>
     </Routes>

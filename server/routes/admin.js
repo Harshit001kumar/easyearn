@@ -3,6 +3,8 @@ const { adminAuth } = require('../middleware/auth');
 const User = require('../models/User');
 const Transaction = require('../models/Transaction');
 const Withdrawal = require('../models/Withdrawal');
+const Task = require('../models/Task');
+const TaskSubmission = require('../models/TaskSubmission');
 
 const router = express.Router();
 
@@ -174,6 +176,115 @@ router.get('/transactions', adminAuth, async (req, res) => {
 
     res.json({ transactions, total, page, pages: Math.ceil(total / limit) });
   } catch (error) {
+    res.status(500).json({ error: 'Server error.' });
+  }
+});
+
+// ═══════════════════════════════════════
+// ─── CUSTOM TASKS ─── CRUD
+// ═══════════════════════════════════════
+
+// ─── CREATE TASK ───
+router.post('/tasks', adminAuth, async (req, res) => {
+  try {
+    const { title, description, rewardAmount, reqProof, link } = req.body;
+    if (!title || !description || rewardAmount == null) {
+      return res.status(400).json({ error: 'Title, description, and reward amount are required.' });
+    }
+    const task = await Task.create({ title, description, rewardAmount: Number(rewardAmount), reqProof: reqProof !== false, link: link || '' });
+    res.json({ message: 'Task created.', task });
+  } catch (error) {
+    console.error('Error creating task:', error);
+    res.status(500).json({ error: 'Server error.' });
+  }
+});
+
+// ─── LIST ALL TASKS (admin) ───
+router.get('/tasks', adminAuth, async (req, res) => {
+  try {
+    const tasks = await Task.find().sort({ createdAt: -1 });
+    res.json({ tasks });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error.' });
+  }
+});
+
+// ─── UPDATE TASK ───
+router.patch('/tasks/:id', adminAuth, async (req, res) => {
+  try {
+    const task = await Task.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!task) return res.status(404).json({ error: 'Task not found.' });
+    res.json({ message: 'Task updated.', task });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error.' });
+  }
+});
+
+// ─── DELETE TASK ───
+router.delete('/tasks/:id', adminAuth, async (req, res) => {
+  try {
+    const task = await Task.findByIdAndDelete(req.params.id);
+    if (!task) return res.status(404).json({ error: 'Task not found.' });
+    // Also remove all submissions for this task
+    await TaskSubmission.deleteMany({ taskId: task._id });
+    res.json({ message: 'Task deleted.' });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error.' });
+  }
+});
+
+// ═══════════════════════════════════════
+// ─── TASK SUBMISSIONS REVIEW
+// ═══════════════════════════════════════
+
+// ─── LIST PENDING SUBMISSIONS ───
+router.get('/task-submissions', adminAuth, async (req, res) => {
+  try {
+    const status = req.query.status || 'pending';
+    const submissions = await TaskSubmission.find({ status })
+      .populate('userId', 'email discord points')
+      .populate('taskId', 'title rewardAmount')
+      .sort({ createdAt: -1 });
+    res.json({ submissions });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error.' });
+  }
+});
+
+// ─── APPROVE / REJECT SUBMISSION ───
+router.patch('/task-submissions/:id', adminAuth, async (req, res) => {
+  try {
+    const { status, reason } = req.body;
+    if (!['approved', 'rejected'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status. Must be approved or rejected.' });
+    }
+
+    const submission = await TaskSubmission.findById(req.params.id).populate('taskId');
+    if (!submission) return res.status(404).json({ error: 'Submission not found.' });
+    if (submission.status !== 'pending') {
+      return res.status(400).json({ error: 'Submission already processed.' });
+    }
+
+    submission.status = status;
+    if (reason) submission.reason = reason;
+    await submission.save();
+
+    // If approved, give user the points
+    if (status === 'approved') {
+      const reward = submission.taskId.rewardAmount;
+      await User.findByIdAndUpdate(submission.userId, { $inc: { points: reward } });
+      await Transaction.create({
+        userId: submission.userId,
+        type: 'custom_task',
+        points: reward,
+        status: 'completed',
+        details: `Task completed: ${submission.taskId.title}`
+      });
+    }
+
+    res.json({ message: `Submission ${status}.`, submission });
+  } catch (error) {
+    console.error('Error processing submission:', error);
     res.status(500).json({ error: 'Server error.' });
   }
 });

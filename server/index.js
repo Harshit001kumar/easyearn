@@ -62,6 +62,7 @@ app.use('/api/postback', require('./routes/postback')); // No rate limit for ser
 app.use('/api/withdraw', apiLimiter, require('./routes/withdraw'));
 app.use('/api/referrals', apiLimiter, require('./routes/referral'));
 app.use('/api/admin', apiLimiter, require('./routes/admin'));
+app.use('/api/tasks', apiLimiter, require('./routes/tasks'));
 
 // ─── ERROR HANDLER ───
 app.use((err, req, res, next) => {

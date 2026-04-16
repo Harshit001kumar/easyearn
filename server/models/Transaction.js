@@ -9,7 +9,7 @@ const transactionSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['faucet', 'offerwall', 'shortlink', 'referral', 'withdrawal', 'daily_bonus', 'admin_adjust'],
+    enum: ['faucet', 'offerwall', 'shortlink', 'referral', 'withdrawal', 'daily_bonus', 'admin_adjust', 'custom_task'],
     required: true
   },
   points: {

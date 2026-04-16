@@ -1,12 +1,13 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
-import { HiHome, HiGift, HiBriefcase, HiLink, HiCurrencyDollar, HiUsers, HiCog, HiLogout, HiShieldCheck } from 'react-icons/hi';
+import { HiHome, HiGift, HiBriefcase, HiLink, HiCurrencyDollar, HiUsers, HiCog, HiLogout, HiShieldCheck, HiStar } from 'react-icons/hi';
 
 const navItems = [
   { to: '/dashboard', icon: HiHome, label: 'Dashboard' },
   { to: '/faucet', icon: HiGift, label: 'Faucet' },
   { to: '/offerwalls', icon: HiBriefcase, label: 'Offerwalls' },
+  { to: '/tasks', icon: HiStar, label: 'Sponsors' },
   { to: '/withdraw', icon: HiCurrencyDollar, label: 'Withdraw' },
   { to: '/referrals', icon: HiUsers, label: 'Referrals' },
 ];
